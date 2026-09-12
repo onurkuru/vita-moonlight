@@ -22,6 +22,122 @@ Vita Moonlight is a PlayStation Vita port of Moonlight, with major improvements 
 - **L1/R1 and L2/R2 Swap:** Swap the functions of the L1/R1 and L2/R2 buttons from the settings menu for greater comfort and customization.
 - **Gamepad Type Selection:** Choose Xbox or PlayStation controller layout directly from the settings menu.
 
+
+## Keyboard mode — play from a **macOS** host (this fork, v0.13.4)
+
+> Download the ready-built VPK from the [Releases](https://github.com/onurkuru/vita-moonlight/releases) page.
+
+### The problem
+
+Sunshine on macOS is experimental and **gamepads do not work**: macOS has no API for injecting a virtual game controller, so any pad input Moonlight sends to a Mac is silently dropped. Video and audio stream fine, but you cannot control anything. Upstream Vita Moonlight only ever sends the Vita's buttons as gamepad input, so a Mac host was unusable.
+
+### The solution
+
+This fork adds **Settings → "Keyboard mode (for macOS host)"** (right below *Swap R1/L1 <-> R2/L2*). When it is `yes`, every button, trigger and stick direction is sent as a **keyboard key** instead — and keyboard input *is* supported by Sunshine on macOS. You then map those keys inside your emulator or game on the Mac.
+
+It is off by default; Windows/Linux users lose nothing.
+
+### Key map
+
+| Vita | Key | Vita | Key |
+|---|---|---|---|
+| ✕ Cross | `Space` | D-pad | `↑ ↓ ← →` |
+| ○ Circle | `E` | Left stick | `W A S D` |
+| □ Square | `Z` | Right stick | `I J K L` |
+| △ Triangle | `C` | L1 / R1 | `Q` / `R` |
+| Start | `Enter` | L2 / R2 (rear touch) | `1` / `3` |
+| Select | `Backspace` | L3 / R3 | `F` / `H` |
+
+Sticks are quantised to 8 directions with a 50 % threshold (no analog speed). Fine for action games, less so for racing.
+
+### Mac host setup (Sunshine)
+
+1. Install Sunshine — `brew install lizardbyte/homebrew/sunshine`, then `brew services start lizardbyte/homebrew/sunshine`. Grant **Screen Recording** when macOS asks (otherwise the log says *Unable to find display or encoder*).
+2. Open `https://localhost:47990`, create a user, pair the Vita with the PIN it shows.
+3. **Required** in `~/.config/sunshine/sunshine.conf`:
+
+   ```ini
+   encoder = software
+   sw_preset = ultrafast
+   sw_tune = zerolatency
+   fec_percentage = 30
+   hevc_mode = 1
+   av1_mode = 1
+   ```
+
+   Apple's VideoToolbox encoder **does not honour on-demand IDR (key-frame) requests**. The Vita is 2.4 GHz-only, so it drops packets, asks for an IDR, never gets one, and freezes for seconds. x264 with `zerolatency` answers immediately and costs only a few percent of one core at 960×544. The log line to look for is `Encoder did not produce IDR frame when requested!` — if you see it, you are still on VideoToolbox.
+4. Restart Sunshine (`brew services restart lizardbyte/homebrew/sunshine`).
+
+### Vita settings that work
+
+| Setting | Value | Why |
+|---|---|---|
+| Resolution | **960x544** | The Vita's native panel; anything larger is wasted bandwidth |
+| FPS | **30** | Most PS3/console games run at 30; 60 doubles bitrate for nothing |
+| Bitrate | **4000 Kbps** | 2.4 GHz Wi-Fi realistic ceiling |
+| Enable reference frame invalidation | yes | Recovers from packet loss without a full key frame |
+| Enable VITA vblank / frame pacer | no | Both add latency |
+| Keyboard mode | **yes** | This feature |
+
+The on-screen counter should read `30 / 30`. `0 / 60` means the stream target is too high.
+
+### Example: RPCS3 on the Mac
+
+Create `~/Library/Application Support/rpcs3/input_configs/global/VitaKeyboard.yml` by copying `Default.yml` and setting:
+
+```yaml
+Player 1 Input:
+  Handler: Keyboard
+  Device: Keyboard
+  Config:
+    Left Stick Left: A
+    Left Stick Down: S
+    Left Stick Right: D
+    Left Stick Up: W
+    Right Stick Left: J
+    Right Stick Down: K
+    Right Stick Right: L
+    Right Stick Up: I
+    Start: Return
+    Select: Backspace
+    Square: Z
+    Cross: Space
+    Circle: E
+    Triangle: C
+    Left: Left
+    Down: Down
+    Right: Right
+    Up: Up
+    R1: R
+    R2: 3
+    R3: H
+    L1: Q
+    L2: 1
+    L3: F
+```
+
+Select it in **Pads → Profile → VitaKeyboard**. Add RPCS3 to Sunshine's `apps.json` so it launches from the Vita:
+
+```json
+{
+  "name": "RPCS3 - My Game",
+  "detached": ["open -a RPCS3 --args --no-gui /path/to/GAME/PS3_GAME"],
+  "prep-cmd": [{ "do": "", "undo": "pkill -x rpcs3" }]
+}
+```
+
+Keep the game window focused on the Mac — keyboard events go to whatever is in front.
+
+Tested on a MacBook Pro M2 (2022) with *X-Men Origins: Wolverine* at a locked 30 fps.
+
+### Other fixes in this fork
+
+- Builds with GCC 15 / current VitaSDK (`-std=gnu99`, `-lzstd`, missing includes) and on macOS hosts (`sed -i.bak`).
+- Settings menu stack overflow: `menu[32]` was exactly full; adding **any** entry corrupted the stack and crashed with `C2-12828-1`. Grown to 48 to match the existing `assert(idx < 48)`.
+- `tests/kbm_test.c` — host-side unit test of the key translation (`cc -std=gnu99 tests/kbm_test.c && ./a.out`).
+
+Build instructions for macOS are in [`BUILD-MAC.md`](BUILD-MAC.md).
+
 ## Documentation
 
 More information can find [moonlight-docs][1], [moonlight-embedded][2], and our [wiki][3].
