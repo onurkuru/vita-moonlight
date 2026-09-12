@@ -167,6 +167,7 @@ SceRtcTick current, until;
 //static int special_status;
 
 input_data curr, old;
+static void send_neutral_frame(void);
 int controller_port;
 bool _calibrateGyro = true;
 bool _motionActivated = false;
@@ -354,7 +355,7 @@ inline void special(uint32_t defined, uint32_t pressed, uint32_t old_pressed) {
         curr.rt = 0;
         pad.buttons = 0;
         // Enviar frame vacío al host para limpiar estado
-        LiSendMultiControllerEvent(0, 1, 0, 0, 0, 0, 0, 0, 0);
+        send_neutral_frame();
         if (dev_val == INPUT_SPECIAL_KEY_PAUSE) {
           connection_minimize();
           // Limpiar input físico DESPUÉS de overlays/eventos modales
@@ -363,7 +364,7 @@ inline void special(uint32_t defined, uint32_t pressed, uint32_t old_pressed) {
           curr.rt = 0;
           pad.buttons = 0;
           // Enviar frame vacío al host para limpiar estado
-          LiSendMultiControllerEvent(0, 1, 0, 0, 0, 0, 0, 0, 0);
+          send_neutral_frame();
           return;
         }
         if (dev_val == INPUT_SPECIAL_KEY_KEYBOARD) {
@@ -374,7 +375,7 @@ inline void special(uint32_t defined, uint32_t pressed, uint32_t old_pressed) {
           curr.rt = 0;
           pad.buttons = 0;
           // Enviar frame vacío al host para limpiar estado
-          LiSendMultiControllerEvent(0, 1, 0, 0, 0, 0, 0, 0, 0);
+          send_neutral_frame();
           return;
         }
         // Si hay otros overlays, añadir aquí
@@ -383,7 +384,7 @@ inline void special(uint32_t defined, uint32_t pressed, uint32_t old_pressed) {
         curr.rt = 0;
         pad.buttons = 0;
         // Enviar frame vacío al host para limpiar estado
-        LiSendMultiControllerEvent(0, 1, 0, 0, 0, 0, 0, 0, 0);
+        send_neutral_frame();
         return;
       case INPUT_TYPE_GAMEPAD:
         curr.button |= dev_val;
@@ -618,6 +619,99 @@ void process_touchzones() {
   special(config.special_keys.se,
           is_pressed(INPUT_TYPE_TOUCHSCREEN | TOUCHSEC_SPECIAL_SE),
           is_old_pressed(INPUT_TYPE_TOUCHSCREEN | TOUCHSEC_SPECIAL_SE));
+}
+
+
+// ---------------------------------------------------------------------------
+// Keyboard mode: translate the gamepad state into keyboard events.
+// Needed for hosts that cannot inject virtual gamepads (Sunshine on macOS).
+// Sticks are quantised to 4 keys each with a 50% threshold.
+// ---------------------------------------------------------------------------
+#define KBM_VK_BACK   0x08
+#define KBM_VK_RETURN 0x0D
+#define KBM_VK_SPACE  0x20
+#define KBM_VK_LEFT   0x25
+#define KBM_VK_UP     0x26
+#define KBM_VK_RIGHT  0x27
+#define KBM_VK_DOWN   0x28
+#define KBM_STICK_THRESHOLD 16384   // of 32767 (read_analog output range)
+
+typedef struct { uint32_t flag; short vk; } kbm_button_map;
+
+static const kbm_button_map KBM_BUTTONS[] = {
+  { A_FLAG,      KBM_VK_SPACE  }, // Cross    -> Space
+  { B_FLAG,      'E'           }, // Circle   -> E
+  { X_FLAG,      'Z'           }, // Square   -> Z
+  { Y_FLAG,      'C'           }, // Triangle -> C
+  { UP_FLAG,     KBM_VK_UP     },
+  { DOWN_FLAG,   KBM_VK_DOWN   },
+  { LEFT_FLAG,   KBM_VK_LEFT   },
+  { RIGHT_FLAG,  KBM_VK_RIGHT  },
+  { LB_FLAG,     'Q'           }, // L1 -> Q
+  { RB_FLAG,     'R'           }, // R1 -> R
+  { PLAY_FLAG,   KBM_VK_RETURN }, // Start  -> Enter
+  { BACK_FLAG,   KBM_VK_BACK   }, // Select -> Backspace
+  { LS_CLK_FLAG, 'F'           }, // L3 -> F
+  { RS_CLK_FLAG, 'H'           }, // R3 -> H
+};
+
+// Bit layout of the virtual "key state" word built from the input_data.
+enum {
+  KBM_LT = 1u << 0, KBM_RT = 1u << 1,
+  KBM_LX_NEG = 1u << 2, KBM_LX_POS = 1u << 3, KBM_LY_NEG = 1u << 4, KBM_LY_POS = 1u << 5,
+  KBM_RX_NEG = 1u << 6, KBM_RX_POS = 1u << 7, KBM_RY_NEG = 1u << 8, KBM_RY_POS = 1u << 9,
+};
+
+static const kbm_button_map KBM_AXES[] = {
+  { KBM_LT,     '1' }, // L2 -> 1
+  { KBM_RT,     '3' }, // R2 -> 3
+  { KBM_LX_NEG, 'A' }, { KBM_LX_POS, 'D' }, { KBM_LY_NEG, 'W' }, { KBM_LY_POS, 'S' }, // Vita Y: negative = up
+  { KBM_RX_NEG, 'J' }, { KBM_RX_POS, 'L' }, { KBM_RY_NEG, 'I' }, { KBM_RY_POS, 'K' },
+};
+
+static uint32_t kbm_axis_state(const input_data *d) {
+  uint32_t st = 0;
+  if (d->lt != 0) st |= KBM_LT;   // lt/rt are 0 or 0xff (signed char → compare with 0)
+  if (d->rt != 0) st |= KBM_RT;
+  if (d->lx < -KBM_STICK_THRESHOLD) st |= KBM_LX_NEG; else if (d->lx > KBM_STICK_THRESHOLD) st |= KBM_LX_POS;
+  if (d->ly < -KBM_STICK_THRESHOLD) st |= KBM_LY_NEG; else if (d->ly > KBM_STICK_THRESHOLD) st |= KBM_LY_POS;
+  if (d->rx < -KBM_STICK_THRESHOLD) st |= KBM_RX_NEG; else if (d->rx > KBM_STICK_THRESHOLD) st |= KBM_RX_POS;
+  if (d->ry < -KBM_STICK_THRESHOLD) st |= KBM_RY_NEG; else if (d->ry > KBM_STICK_THRESHOLD) st |= KBM_RY_POS;
+  return st;
+}
+
+static void kbm_send_diff(uint32_t now, uint32_t before, const kbm_button_map *tbl, size_t n) {
+  for (size_t i = 0; i < n; i++) {
+    uint32_t was = before & tbl[i].flag, is = now & tbl[i].flag;
+    if (is && !was)      LiSendKeyboardEvent(tbl[i].vk, KEY_ACTION_DOWN, 0);
+    else if (!is && was) LiSendKeyboardEvent(tbl[i].vk, KEY_ACTION_UP, 0);
+  }
+}
+
+// Emit key transitions between `before` and `now`; returns nothing, purely side effects.
+static void keyboard_mode_send(const input_data *now, const input_data *before) {
+  kbm_send_diff(now->button, before->button, KBM_BUTTONS, sizeof(KBM_BUTTONS)/sizeof(KBM_BUTTONS[0]));
+  kbm_send_diff(kbm_axis_state(now), kbm_axis_state(before), KBM_AXES, sizeof(KBM_AXES)/sizeof(KBM_AXES[0]));
+}
+
+// Release every key we might be holding (used when leaving the stream / opening overlays).
+static void keyboard_mode_release_all(void) {
+  input_data none; memset(&none, 0, sizeof(none));
+  input_data all;  memset(&all, 0, sizeof(all));
+  all.button = 0xFFFF; all.lt = all.rt = 0xFF;
+  // Axis "all pressed" cannot be represented (neg and pos are exclusive) → do two passes.
+  all.lx = all.ly = all.rx = all.ry = 32767;  keyboard_mode_send(&none, &all);
+  all.lx = all.ly = all.rx = all.ry = -32767; keyboard_mode_send(&none, &all);
+}
+
+// Tell the host "nothing is pressed" — as an empty gamepad frame, or as key-ups in keyboard mode.
+static void send_neutral_frame(void) {
+  if (config.keyboard_mode) {
+    keyboard_mode_release_all();
+    memset(&old, 0, sizeof(input_data));
+  } else {
+    LiSendMultiControllerEvent(0, 1, 0, 0, 0, 0, 0, 0, 0);
+  }
 }
 
 void process_buttons() {
@@ -874,7 +968,11 @@ inline void vitainput_process(void) {
   bool shortcut_both_pressed = (pad.buttons & SCE_CTRL_START) && (pad.buttons & SCE_CTRL_LEFT);
   if (!keyboard_overlay_active || (keyboard_overlay_active && !shortcut_both_pressed)) {
     if (memcmp(&curr, &old, sizeof(input_data)) != 0) {
-      LiSendMultiControllerEvent(0, 1, curr.button, curr.lt, curr.rt, curr.lx, -1 * curr.ly, curr.rx, -1 * curr.ry);
+      if (config.keyboard_mode) {
+        keyboard_mode_send(&curr, &old);
+      } else {
+        LiSendMultiControllerEvent(0, 1, curr.button, curr.lt, curr.rt, curr.lx, -1 * curr.ly, curr.rx, -1 * curr.ry);
+      }
       memcpy(&old, &curr, sizeof(input_data));
       memcpy(&pad_old, &pad, sizeof(SceCtrlData));
     }

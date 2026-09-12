@@ -75,6 +75,8 @@ static int ini_handle(void *out, const char *section, const char *name,
       config->controller_type = INT(value);
     } else if (strcmp(name, "swap_shoulder_buttons") == 0) {
       config->swap_shoulder_buttons = BOOL(value);
+    } else if (strcmp(name, "keyboard_mode") == 0) {
+      config->keyboard_mode = BOOL(value);
     } else if (strcmp(name, "key_dir") == 0) {
       strncpy(config->key_dir, value, sizeof(config->key_dir)-1);
       config->key_dir[sizeof(config->key_dir)-1] = '\0';
@@ -215,6 +217,7 @@ void config_save(const char* filename, PCONFIGURATION config) {
   write_config_int(fd, "keyboard_layout", config->keyboard_layout);
   write_config_int(fd, "touchscreen_mode", config->touchscreen_mode);
   write_config_bool(fd, "swap_shoulder_buttons", config->swap_shoulder_buttons); // Guardar swap_shoulder_buttons en la raíz
+  write_config_bool(fd, "keyboard_mode", config->keyboard_mode);
   write_config_int(fd, "controller_type", config->controller_type); // Guardar controller_type en la raíz
   
 
@@ -285,6 +288,7 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
   config->enable_ref_frame_invalidation = false;
   config->enable_vita_vblank_wait = false;
   config->enable_psbutton_capture = true;
+  config->keyboard_mode = false;
   config->enable_double_tap_sprint = false;
 
   config->double_tap_sprint_step_time = 200;

@@ -86,6 +86,7 @@ typedef struct _CONFIGURATION {
   int touchscreen_mode; // 0=off, 1=DS4, 2=Mouse absoluto, 3=Tableta multitouch
   int controller_type; // 1: Xbox, 2: PS (default), 3: Nintendo, 4: Generic
   bool swap_shoulder_buttons; // Nuevo: swap R1/L1 <-> R2/L2
+  bool keyboard_mode; // Send buttons/sticks as keyboard keys (for hosts without gamepad support, e.g. macOS Sunshine)
 } CONFIGURATION, *PCONFIGURATION;
 
 extern CONFIGURATION config;

@@ -445,6 +445,7 @@ enum {
   // SETTINGS_HOTKEYS, // Eliminado: hotkeys fijos
   SETTINGS_CONTROLLER_TYPE,
   SETTINGS_SWAP_SHOULDER_BUTTONS, // NUEVO: Swap R1/L1 <-> R2/L2
+  SETTINGS_KEYBOARD_MODE, // Send gamepad as keyboard keys (macOS Sunshine)
   SETTINGS_MOUSE_ACCEL,
   SETTINGS_KEYBOARD_LAYOUT,
   SETTINGS_TOUCH_MODE_SELECT // Nuevo: selección de modo táctil exclusivo
@@ -478,6 +479,7 @@ enum {
   // SETTINGS_VIEW_HOTKEYS, // Eliminado: hotkeys fijos
   SETTINGS_VIEW_CONTROLLER_TYPE,
   SETTINGS_VIEW_SWAP_SHOULDER_BUTTONS, // NUEVO: Swap R1/L1 <-> R2/L2
+  SETTINGS_VIEW_KEYBOARD_MODE,
   SETTINGS_VIEW_MOUSE_ACCEL,
   SETTINGS_VIEW_KEYBOARD_LAYOUT,
   SETTINGS_VIEW_TOUCH_MODE_SELECT, // Vista para modo táctil exclusivo
@@ -858,6 +860,13 @@ static int settings_loop(int id, void *context, const input_data *input) {
       config.enable_psbutton_capture = !config.enable_psbutton_capture;
       did_change = 1;
       break;
+    case SETTINGS_KEYBOARD_MODE:
+      if ((input->buttons & config.btn_confirm) == 0 || input->buttons & SCE_CTRL_HOLD) {
+        break;
+      }
+      config.keyboard_mode = !config.keyboard_mode;
+      did_change = 1;
+      break;
     case SETTINGS_MOUSE_ACCEL:
       left = input->buttons & SCE_CTRL_LEFT;
       right = input->buttons & SCE_CTRL_RIGHT;
@@ -959,6 +968,9 @@ static int settings_loop(int id, void *context, const input_data *input) {
   sprintf(current, "%s", config.enable_psbutton_capture ? "yes" : "no");
   MENU_REPLACE(SETTINGS_VIEW_ENABLE_PSBUTTON_CAPTURE, current);
 
+  sprintf(current, "%s", config.keyboard_mode ? "yes" : "no");
+  MENU_REPLACE(SETTINGS_VIEW_KEYBOARD_MODE, current);
+
   sprintf(current, "%s", config.enable_front_touchzones ? "yes" : "no");
   MENU_REPLACE(SETTINGS_VIEW_ENABLE_SPECIAL_KEYS, current);
 
@@ -997,7 +1009,7 @@ static int settings_back(void *context) {
 // Eliminado: hotkeys_menu y referencias, ya que los atajos ahora son fijos
 
 int ui_settings_menu() {
-  menu_entry menu[32];
+  menu_entry menu[48]; // must match assert(idx < 48) below
   int idx = 0;
 #define MENU_CATEGORY(NAME) \
   do { \
@@ -1042,6 +1054,7 @@ int ui_settings_menu() {
   MENU_ENTRY(SETTINGS_DOUBLE_TAP_SPRINT_STEP_TIME, SETTINGS_VIEW_DOUBLE_TAP_SPRINT_STEP_TIME, "Sprint double tap time", "");
   MENU_ENTRY(SETTINGS_CONTROLLER_TYPE, SETTINGS_VIEW_CONTROLLER_TYPE, "Controller type", ICON_LEFT_RIGHT_ARROWS);
   MENU_ENTRY(SETTINGS_SWAP_SHOULDER_BUTTONS, SETTINGS_VIEW_SWAP_SHOULDER_BUTTONS, "Swap R1/L1 <-> R2/L2", "");
+  MENU_ENTRY(SETTINGS_KEYBOARD_MODE, SETTINGS_VIEW_KEYBOARD_MODE, "Keyboard mode (for macOS host)", "");
   MENU_ENTRY(SETTINGS_MOUSE_ACCEL, SETTINGS_VIEW_MOUSE_ACCEL, "Mouse acceleration", ICON_LEFT_RIGHT_ARROWS);
   MENU_ENTRY(SETTINGS_ENABLE_MAPPING, SETTINGS_VIEW_ENABLE_MAPPING, "Enable mapping file", "");
   char mapping_location_msg[256];
