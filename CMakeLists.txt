@@ -22,7 +22,7 @@ set(TITLE_ID "XYZZ00002")
 set(TITLE "Moonlight")
 set(VERSION_MAJOR "0")
 set(VERSION_MINOR "13")
-set(VERSION_PATCH "2")
+set(VERSION_PATCH "4")
 
 execute_process(COMMAND
 	python -c "print('%02d.%02d' % (${VERSION_MAJOR}, ${VERSION_MINOR}))"
@@ -34,7 +34,7 @@ add_definitions(-DVERSION_MAJOR=${VERSION_MAJOR})
 add_definitions(-DVERSION_MINOR=${VERSION_MINOR})
 add_definitions(-DVERSION_PATCH=${VERSION_PATCH})
 
-set(CMAKE_C_FLAGS "-Wl,-q -g -std=c99 -D__vita__")
+set(CMAKE_C_FLAGS "-Wl,-q -g -std=gnu99 -D__vita__ -Wno-error=implicit-function-declaration -Wno-error=int-conversion -Wno-error=incompatible-pointer-types")
 
 
 
@@ -147,6 +147,7 @@ add_executable(${PROJECT_NAME}.elf
 target_link_libraries(${PROJECT_NAME}.elf
 	-lexpat
 	-lcurl
+	-lzstd
 	moonlight-common-c
 	enet
 	h264bitstream
@@ -194,7 +195,7 @@ add_custom_target(param.sfo ALL
 
 # Actualizar versión en template.xml automáticamente antes de empaquetar el VPK (solo la línea visual)
 add_custom_target(update_template_version ALL
-	COMMAND sed -i '/<str size=\"18.*>v[0-9]*\.[0-9]*\.[0-9]*<\\/str>/s/v[0-9]*\.[0-9]*\.[0-9]*/v${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}/' sce_sys/livearea/contents/template.xml
+	COMMAND sed -i.bak '/<str size=\"18.*>v[0-9]*\.[0-9]*\.[0-9]*<\\/str>/s/v[0-9]*\.[0-9]*\.[0-9]*/v${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}/' sce_sys/livearea/contents/template.xml
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
